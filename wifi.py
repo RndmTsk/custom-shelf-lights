@@ -173,7 +173,9 @@ def sync_time():
         return False
     try:
         import ntptime
+        watchdog.feed()
         ntptime.settime()
+        watchdog.feed()
         logger.info("NTP sync successful", data={"ts": time.time()})
         return True
     except Exception as e:

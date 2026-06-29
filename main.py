@@ -47,8 +47,15 @@ logger.info("=== Shelf Lights Starting ===",
             data={"main_version": MAIN_VERSION,
                   "env_keys": _env_count})
 
-# Start watchdog — cannot be stopped after this point
-watchdog.start(timeout_ms=20000)
+def _feed():
+    """Feed watchdog during startup (main loop feeds every iteration)."""
+    if watchdog.is_started():
+        watchdog.feed()
+
+# Start watchdog — cannot be stopped after this point.
+# Pico hardware max is ~8388 ms; feed() during startup until main loop runs.
+watchdog.start(timeout_ms=8388)
+_feed()
 
 # ============================================================
 # CONFIGURE MODULES FROM ENV
@@ -81,6 +88,7 @@ http_server.configure(
 # SLOT SELECTION
 # ============================================================
 
+_feed()
 _slot = slots.read_slot()
 logger.info("Slot selected", data={"slot": _slot})
 
@@ -107,8 +115,10 @@ def _load_ext(slot):
     try:
         with open(filename, "r") as f:
             code = f.read()
+        _feed()
         ns = {}
         exec(code, ns)
+        _feed()
 
         class _Proxy:
             pass
@@ -131,7 +141,9 @@ def _load_ext(slot):
                      data={"slot": slot, "error": str(e)})
         return None
 
+_feed()
 _ext = _load_ext(_slot)
+_feed()
 
 if _ext is None:
     _fallback = slots.other_slot(_slot)
@@ -145,11 +157,14 @@ if _ext is None:
     else:
         logger.error("Both extension slots failed")
 
+_feed()
+
 # ============================================================
 # WIFI + NTP
 # ============================================================
 
 _wifi_ok = wifi.connect(timeout_ms=20000)
+_feed()
 
 if _wifi_ok:
     wifi.sync_time()
@@ -165,12 +180,16 @@ else:
 
 if _ext is not None:
     try:
+        _feed()
         _ext.setup(env._env)
+        _feed()
         logger.info("Extensions setup complete")
     except Exception as e:
         logger.error("Extensions setup failed",
                      data={"error": str(e)})
         _ext = None
+
+_feed()
 
 # ============================================================
 # BUILT-IN HTTP HANDLERS
@@ -297,6 +316,8 @@ if _wifi_ok:
         logger.warn("HTTP server failed to start")
 else:
     logger.warn("HTTP server not started — no WiFi")
+
+_feed()
 
 # ============================================================
 # PRINT STARTUP SUMMARY
